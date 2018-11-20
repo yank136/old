@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>video recoder</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+</head>
+<style>
+    body{
+        background-color:#EFEDEF;
+    }
+</style>
+<body>
+    <article style="border:1px solid white;width:400px;height:400px;margin:0 auto;background-color:white;">
+
+        <section class="experiment" style="width:320px; height:240px;border:1px solid green; margin:50px auto;">
+            <div id="videos-container" style="width:320px; height:240px;">
+            </div>
+        </section>
+        <section class="experiment" style="text-align:center;border:none; margin-top:20px;">
+            <button id="openCamera">打开摄像头</button>
+            <input type="button" id="start-recording" value="开始录制" disabled>
+			<button id="stop-recording" disabled>停止录制</button>
+            <a id="save"><button id="save-recording" disabled>保存</button></a>
+            <a href="javascript:void(0)" onclick="send()">发送</a>
+        </section>
+ </article>
+<script>
+            var mediaStream;
+			var recordState=0;
+            var recorderFile;
+            var stopRecordCallback;
+            var openBtn = document.getElementById("openCamera");
+            var startBtn = document.getElementById("start-recording");
+			var stopBtn = document.getElementById("stop-recording");
+            var saveBtn = document.getElementById("save-recording");
+			var savefile = document.getElementById("save");
+			
+            openBtn.onclick = function() {
+                this.disabled = true;
+                openCamera();
+				startBtn.disabled=false;
+				stopBtn.disabled=true;
+				//saveBtn.disabled=true;
+            };
+
+/*            startBtn.onclick = function() {
+                this.disabled = true;
+                startRecord();
+            };*/
+			
+			startBtn.onclick = function() {
+				recordState++;
+				if(recordState==1){
+					startBtn.value="暂停录制";
+					startRecord();
+				}
+				if(recordState==2){
+					pauseRecord();
+					startBtn.value="继续录制";
+				}
+				if(recordState==3){
+					startBtn.value="暂停录制";
+					resumeRecord();
+					recordState=1;
+				}
+            };
+			
+			stopBtn.onclick = function() {
+				recordState=0;
+				startBtn.value="开始录制";
+				startBtn.disabled=true;
+				stopBtn.disabled=true;
+				stopRecord();
+	
+            };
+
+            saveBtn.onclick = function() {
+                saver();
+
+                // alert('Drop WebM file on Chrome or Firefox. Both can play entire file. VLC player or other players may not work.');
+            };
+
+            var mediaRecorder;
+            var videosContainer = document.getElementById('videos-container');
+
+            function openCamera(){
+                var len = videosContainer.childNodes.length;
+                for(var i=0;i<len;i++){
+                    videosContainer.removeChild(videosContainer.childNodes[i]);
+                }
+
+                var video = document.createElement('video');
+
+                var videoWidth = 320;
+                var videoHeight = 240;
+
+                video.controls = false;
+                video.muted = true;
+                video.width = videoWidth;
+                video.height = videoHeight;
+                MediaUtils.getUserMedia(true, false, function (err, stream) {
+                    if (err) {
+                        throw err;
+                    } else {
+                        // 通过 MediaRecorder 记录获取到的媒体流
+                        console.log();
+                        mediaRecorder = new MediaRecorder(stream);
+                        mediaStream = stream;
+                        var chunks = [], startTime = 0;
+                        video.srcObject = stream;
+                        video.play();
+
+                        videosContainer.appendChild(video);
+                        mediaRecorder.ondataavailable = function(e) {
+                            mediaRecorder.blobs.push(e.data);
+                            chunks.push(e.data);
+                        };
+                        mediaRecorder.blobs = [];
+                        mediaRecorder.onstop = function (e) {
+                            recorderFile = new Blob(chunks, { 'type' : mediaRecorder.mimeType });
+                            chunks = [];
+                            if (null != stopRecordCallback) {
+                                stopRecordCallback();
+                            }
+                        };
+						console.log((new Date).toString()+" openCamera:"+recorderFile);
+                }
+            });
+            }
+
+            var MediaUtils = {
+                /**
+                * 获取用户媒体设备(处理兼容的问题)
+                * @param videoEnable {boolean} - 是否启用摄像头
+                * @param audioEnable {boolean} - 是否启用麦克风
+                * @param callback {Function} - 处理回调
+                */
+                getUserMedia: function (videoEnable, audioEnable, callback) {
+                    navigator.getUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia
+                    || navigator.msGetUserMedia || window.getUserMedia;
+                    var constraints = {video: videoEnable, audio: audioEnable};
+                    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                        navigator.mediaDevices.getUserMedia(constraints).then(function (stream) {
+                        callback(false, stream);
+                    })['catch'](function(err) {
+                        callback(err);
+                    });
+                    } else if (navigator.getUserMedia) {
+                        navigator.getUserMedia(constraints, function (stream) {
+                        callback(false, stream);
+                    }, function (err) {
+                        callback(err);
+                    });
+                } else {
+                    callback(new Error('Not support userMedia'));
+                }
+            },
+
+                /**
+                * 关闭媒体流
+                * @param stream {MediaStream} - 需要关闭的流
+                */
+                closeStream: function (stream) {
+                    if (typeof stream.stop === 'function') {
+                        stream.stop();
+                    }
+                    else {
+                        let trackList = [stream.getAudioTracks(), stream.getVideoTracks()];
+
+                        for (let i = 0; i < trackList.length; i++) {
+                            let tracks = trackList[i];
+                            if (tracks && tracks.length > 0) {
+                                for (let j = 0; j < tracks.length; j++) {
+                                    let track = tracks[j];
+                                    if (typeof track.stop === 'function') {
+                                        track.stop();
+                                    }
+                                }
+                            }
+                        }
+                    }
+					console.log((new Date).toString()+" closeStream:"+recorderFile);
+                }
+            }; 
+/*
+function startRecord() {
+    mediaRecorder.start();
+    setTimeout(function(){
+        // 结束
+        stopRecord(function() {
+            alert("录制成功!");
+            openBtn.disabled=false;
+            saveBtn.disabled=false;
+            //send();
+        });
+    }, 5000);
+}
+
+// 停止录制
+function stopRecord(callback) {
+	stopRecordCallback = callback;
+	// 终止录制器
+	mediaRecorder.stop();
+	// 关闭媒体流
+	MediaUtils.closeStream(mediaStream);
+}
+*/
+
+function startRecord() {
+    mediaRecorder.start();
+	stopBtn.disabled=false;
+}
+
+function pauseRecord() {
+    mediaRecorder.pause();
+}
+
+function resumeRecord() {
+    mediaRecorder.resume();
+}
+
+// 停止录制
+function stopRecord(callback) {
+	stopRecordCallback = callback;
+	// 终止录制器
+	mediaRecorder.stop();
+	// 关闭媒体流
+	MediaUtils.closeStream(mediaStream);
+	openBtn.disabled=false;
+    saveBtn.disabled=false;
+	console.log([recorderFile])
+}
+
+function saver(){
+    downloadFile("1.mp4",recorderFile);
+	console.log("saved");
+}
+/*
+function saver(){
+    var file = new File([recorderFile], 'msr-' + (new Date).toISOString().replace(/:|\./g, '-') + '.mp4', {
+        type: 'video/mp4'
+    });
+	console.log(file);
+    saveAs(file);
+}
+
+function downloadFile(fileName, content){
+    var aLink = document.createElement('a');
+    var blob = new Blob([content]);
+    var evt = document.createEvent("HTMLEvents");
+    evt.initEvent("click", false, false);
+    aLink.download = fileName;
+    aLink.href = URL.createObjectURL(blob);
+    aLink.dispatchEvent(evt);
+		console.log("saved0");
+}
+*/
+
+function downloadFile(fileName, content){
+    //var aLink = document.createElement('a');
+    var blob = content;
+    //var evt = document.createEvent("HTMLEvents");
+    //evt.initEvent("click", false, false);
+    savefile.download = fileName;
+    savefile.href = URL.createObjectURL(blob);
+    //savefile.dispatchEvent(evt);
+		console.log("saved0");
+}
+
+function send(){
+    var file = new File([recorderFile], 'msr-' + (new Date).toISOString().replace(/:|\./g, '-') + '.mp4', {
+        type: 'video/mp4'
+    });
+    var data = new FormData();
+    data.append("username", "test");
+    data.append("userfile", file);
+
+    var req = new XMLHttpRequest();
+    req.open("POST", "com.spinsoft.bip.frame.utils.image.saveMp4.biz.ext");
+    req.send(data);
+}
+
+</script>
+
+</body>
+
+</html>
